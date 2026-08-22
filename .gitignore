@@ -1,0 +1,10 @@
+# NEVER PUBLISH: the vendor driver package and the Windows registry dumps
+# taken from the bench box.  They are third-party material and machine
+# state, kept locally as recon reference only.
+vendor/
+win-recon/
+.DS_Store
+*.lst
+*.o
+*.obj
+*.map
