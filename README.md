@@ -1,101 +1,99 @@
-# EXPGXGO — DOS enabler for the EXP "GAME/MIDI G3" PC Card
+# EXPGXGO — DOS enabler for EXP "Game Traveler" PC Cards
 
-Clean-room DOS enabler + recon tools for the **EXP GAME/MIDI G3** PCMCIA
-game port / MIDI card (EXP Computer "Game Traveler" family; OEM: **Argosy
-Research**, named in a non-standard CIS tuple 0x40). Built from the card's
-own CIS, the vendor driver's plain-text configuration declarations (INF
-resource tables), and live hardware recon; no vendor binary was read or
-disassembled.
+Clean-room DOS enabler and recon tool for EXP Computer's PCMCIA game
+port / MIDI cards (OEM: **Argosy Research**, named in a non-standard CIS
+tuple 0x40). Built from the cards' own CIS, the vendor driver's plain-text
+configuration declarations, and live hardware recon — no vendor binary was
+read or disassembled.
 
-**Status: MIDI OUT working, including at 0x330 (2026-08-21).**
-`EXPGXGO /PCIC /MPU` then `DOSMID /com=330 song.mid` plays a full MIDI
-file to an external synth through the classic Sound Blaster-style layout
-(gameport 0x201 + MIDI 0x330) — the 0x330 appearance is a pure hardware
-remap through the PCIC's I/O-window offset registers, no TSR involved.
+**Status:** the **GAME/MIDI G3** is fully bench-proven on an IBM PC110 —
+gameport and MIDI both come up, and MIDI plays. The gameport-only siblings
+(the G1/G2 class) are supported best-effort but **untested**; we hold no
+such card.
 
-## The card (what the CIS says, and what it hides)
+## The card, and what its CIS hides
 
-- VERS_1 `"EXP" / "GAME/MIDI" / "G3"`; **no MANFID** (identified by the
-  VERS_1 substring `GAME/MIDI`)
-- Config registers @ attribute **0x100**, COR only (index bits only — bits
-  6/5 don't latch)
+- VERS_1 `"EXP" / "GAME/MIDI" / "G3"`; **no MANFID**, so identity is a
+  VERS_1 substring match
+- Config registers @ attribute **0x100**, COR only (index bits only)
 - CIS declares one 8-byte I/O block: index 1 (default) **0x200–0x207**,
-  index 2 **0x208–0x20F** — the gameport (classic 0x201, reads 0xFF with
-  no stick plugged)
-- **The CIS does NOT declare the MIDI function.** The vendor's Windows INF
+  index 2 **0x208–0x20F** — the gameport (classic 0x201; reads 0xFF with
+  no stick plugged, which is its honest empty answer)
+- **The CIS never declares the MIDI function.** The vendor's Windows INF
   does: a second 8-byte block — **0x250–0x257 with COR 1**, 0x260–0x267
-  with COR 2 — holding a **16550-class UART** clocked so that **divisor
-  24 = 31250 baud** (~12 MHz UART clock). MIDI OUT needs no IRQ; the
-  vendor routes one for MIDI IN.
-- Bring-up: window over the block → LCR=03 (8N1) → divisor 24 (DLAB
-  dance) → MCR=00 → FCR=01 (optional; the vendor stack runs FIFOs on) →
-  write THR with LSR-bit-5 pacing.
+  with COR 2 — holding a **16550-class UART** clocked so that **divisor 24
+  = 31250 baud**. MIDI OUT needs no IRQ.
+
+The family differs in what it carries, not how it is configured, so one
+bring-up serves all of it: match `GAME` to claim the card, then
+`GAME/MIDI` to decide whether the MIDI half exists. Gameport-only cards
+get a single I/O window and no UART programming.
 
 ## Tools
 
-- `EXPGXGO.ASM` → `EXPGXGO.COM` — three-backend enabler in the
-  ES1688GO/SCP55GO mold: `/PCIC` (direct 82365), `/CS` (Card Services
-  client, TSR + hot-plug), `/OB` (OmniBook 300/425/430 Socket Services).
-  Auto-detects CS > SS > PCIC. Brings up gameport window, MIDI window,
-  and the UART (31250 8N1), and reports the UART's LSR as liveness.
-  `/MPU[=330]` remaps the UART onto the host bus at 0x330 through the
-  PCIC's I/O-window offset registers (Cirrus/Ricoh 82365 supersets;
-  verified on a Ricoh RL5C476) — with readback verification and automatic
-  fallback to the native base on controllers without offset support.
-  PCIC backend only. Game caveat: 0x331 is the UART's IER, not an MPU
-  status port, so games hang probing the remap — for games use MPUSHIM
-  instead (see below); the remap serves players like DOSMid.
-  `/IO=200|208`, `/S=n`, `/W=seg`, `/FORCE`, `/OFF`, `/SWEEP` (recon).
-  Build: `nasm -f bin EXPGXGO.ASM -o EXPGXGO.COM`.
-- `EXPGXTRY.C` — recon probe (Watcom, `C:\WATCOM\BLD.BAT EXPGXTRY`):
-  block dumps, gameport test, UART battery (`/UART`: poll-calibrated
-  baud measurement, loopback, burst timing), `/FIFO` (plays test chords
-  — on MIDI channels 2+3), `/CFG` (config-space experiments), `/PCIC`
-  reg dump, `/OT` (I/O-window offset-remap experiment), `/S=n` socket.
-
-## Playing MIDI from DOS
+**`EXPGXGO.COM`** — three-backend enabler in the ES1688GO/SCP55GO mould:
+`/PCIC` (direct 82365), `/CS` (Card Services client, TSR + hot-plug),
+`/OB` (OmniBook 300/425/430 Socket Services). Auto-detects CS > SS > PCIC.
 
 ```
-EXPGXGO /PCIC /MPU
-DOSMID /com=330 CANYON.MID
+EXPGXGO [/PCIC|/CS|/OB] [/IO=200] [/MIDI[=330]] [/S=n] [/W=D000] [/OFF]
+  /IO=hex    card config: 200 (default) or 208; picks the COR index
+  /MIDI[=hex] put the MIDI UART at host I/O 330 (or hex) instead of its
+             native base — a bridge remap, NOT an MPU-401
+  /S=dec     socket (PCIC 0-7, OB 1-2; CS: probe only this socket)
+  /W=hex     attr-window segment for CIS/COR (PCIC, default D000)
+  /FORCE     configure without the CIS identity check (needs /S)
+  /OFF       power the socket down (PCIC) / release + dormant (CS)
+  /SWEEP     recon: walk COR 00-3F watching the I/O blocks
 ```
 
-Use DOSMid's **`/com=`** output (raw UART), NOT `/mpu` — the card has no
-MPU-401 protocol engine, so MPU reset/ACK handshakes can never succeed;
-`/com=` is the mode that matches the hardware. Without `/MPU` on the
-enabler, the UART sits at its native base: `/com=250` (or `/com=260`
-after `EXPGXGO /IO=208`). The enabler programs the UART, so DOSMid needs
-no `MODE` setup.
+`/MIDI` uses the bridge's I/O-window offset registers (Cirrus/Ricoh 82365
+supersets — verified on both a Ricoh RL5C476 and the PC110's RB5C396),
+with readback verification and automatic fallback to the native base on
+controllers without offset support. PCIC backend only.
 
-## Lessons that cost real time (so you don't pay twice)
+**`EXPGXTRY.C`** — recon probe (Watcom, `C:\WATCOM\BLD.BAT EXPGXTRY`):
+block dumps, gameport test, UART battery (`/UART`: poll-calibrated baud
+measurement, loopback, burst timing), `/FIFO` test chords, `/CFG`
+config-space experiments, `/PCIC` register dump, `/OT` offset-remap
+experiment, `/S=n` socket select.
 
-1. **The CIS lies by omission** — the MIDI block exists only in the
-   vendor INF's resource declarations. A CIS-faithful enabler and a
-   64-index COR sweep both missed it because nothing *reads back* at the
-   gameport block without a joystick (0xFF is that gameport's honest
-   empty answer).
+## Playing MIDI
+
+For a *player*, the card's UART is driven directly:
+
+```
+EXPGXGO /PCIC
+DOSMID /com=250 CANYON.MID
+```
+
+Use DOSMid's `/com=` (raw UART), **not** `/mpu` — the card has no MPU-401
+protocol engine, so reset/ACK handshakes can never succeed. With `/MIDI`
+the UART appears at 0x330 and `/com=330` works instead.
+
+*Games* are different: they speak the MPU-401 handshake, which a bare UART
+cannot answer — they hang probing it. That layer is a separate tool,
+**MPUSHIM**, which traps 330h/331h and presents a real MPU-401 facade over
+this card's UART. Enable with `EXPGXGO /PCIC` (native base, no `/MIDI`),
+then run MPUSHIM.
+
+## Lessons that cost real time
+
+1. **The CIS lies by omission** — the MIDI block exists only in the vendor
+   INF's resource declarations. A CIS-faithful enabler and a 64-index COR
+   sweep both missed it, because nothing reads back at the gameport block
+   without a joystick attached.
 2. **The UART hides its 16550 nature** — FCR writes are invisible on a
-   16450, and the idle register file is byte-identical.
-3. **The MT-32/CM-32L family ignores MIDI channel 1 by default**
-   (receives 2–10), and Active Sensing doesn't blink its MIDI light.
-   Days of "dead TX" were a synth discarding channel-1 test notes; the
-   transmitter had been working nearly from the start. Blind test notes
-   must use channel 2+.
-
-## Games: use MPUSHIM
-
-The `/MPU` hardware remap gives *players* an MPU at 330h, but games also
-need the MPU-401 *protocol* (status bits, the 0xFE ACK) that this card's
-bare UART cannot answer — they hang probing it. That layer now exists as
-its own tool: **MPUSHIM**, a 1.6 KB resident MPU-401 facade that traps
-330h/331h and forwards to this card's UART. Bench-proven with Monkey
-Island 1 (Roland MT-32 music) on the IBM PC110. Recipe: enable with
-`EXPGXGO /PCIC` (native 250h, no `/MPU`), then run MPUSHIM under
-JEMM386+QPIEMU — see the MPUSHIM project.
+   16450 and the idle register file is byte-identical.
+3. **The MT-32/CM-32L family ignores MIDI channel 1 by default** (it
+   receives 2–10), and Active Sensing doesn't blink its MIDI light. Days
+   of "dead TX" were a synth discarding channel-1 test notes while the
+   transmitter worked fine. Blind test notes must use channel 2+.
 
 ## Open items
 
-- Hardware-verify the /CS and /OB backends
+- Hardware-verify the `/CS` and `/OB` backends
+- Verify the family path on a real G1/G2
 - MIDI IN (IRQ) untested
 
 ## License
