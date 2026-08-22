@@ -71,11 +71,34 @@ Use DOSMid's `/com=` (raw UART), **not** `/mpu` — the card has no MPU-401
 protocol engine, so reset/ACK handshakes can never succeed. With `/MIDI`
 the UART appears at 0x330 and `/com=330` works instead.
 
-*Games* are different: they speak the MPU-401 handshake, which a bare UART
-cannot answer — they hang probing it. That layer is a separate tool,
-**MPUSHIM**, which traps 330h/331h and presents a real MPU-401 facade over
-this card's UART. Enable with `EXPGXGO /PCIC` (native base, no `/MIDI`),
-then run MPUSHIM.
+## Games need an MPU-401 — use MPUSHIM
+
+There is **no MPU-401 on this card**, and no amount of enabling creates one.
+Games do not just stream bytes at a MIDI port: they expect the MPU-401
+handshake — a reset command answered by an `FEh` ACK, and a status port
+whose bits report data-ready and write-ready. A bare UART answers none of
+that, and a game's "drain any pending input" loop spins forever against a
+status port that never says "no data", so it hangs before it draws a frame.
+Relocating the UART to 0x330 with `/MIDI` does not help: the byte at 0x331
+is then the UART's interrupt-enable register, not an MPU status port.
+
+The missing layer is supplied in software by a companion tool:
+
+> **[MPUSHIM](https://github.com/zikolas/mpushim)** — traps 330h/331h and
+> presents a real MPU-401 UART-mode facade (correct status byte, the `FEh`
+> ACK) while forwarding MIDI to this card's UART. It covers both real-mode
+> (V86) and 32-bit DPMI/DOS4GW games.
+
+Bring the card up at its **native** base and let the shim own 0x330:
+
+```
+EXPGXGO /PCIC          :: UART at 250 - do NOT pass /MIDI here
+MPUSHIM /UART=250      :: presents the MPU-401 at 330
+```
+
+Then start the game and select **MPU-401 / General MIDI at 330**.
+MPUSHIM is a separate project and is licensed **GPL v2**, unlike this
+repository.
 
 ## Lessons that cost real time
 
