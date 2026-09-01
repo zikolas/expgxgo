@@ -1,5 +1,5 @@
 ;==========================================================================
-;  EXPGXGO 0.4 - unified clean-room DOS enabler for the EXP "GAME/MIDI G3"
+;  EXPGXGO 0.5 - unified clean-room DOS enabler for the EXP "GAME/MIDI G3"
 ;             PCMCIA game port + MIDI card (OEM: Argosy Research), three
 ;             host backends in one .COM:
 ;
@@ -3229,7 +3229,7 @@ errout:                               ; SI = message; print + exit
 ;==========================================================================
 ;  MESSAGES
 ;==========================================================================
-m_banner:  db 'EXPGXGO 0.4 - EXP GAME/MIDI G3 (Argosy) enabler (PCIC/CS/OB)',13,10,0
+m_banner:  db 'EXPGXGO 0.5 - EXP GAME/MIDI G3 (Argosy) enabler (PCIC/CS/OB)',13,10,0
 m_settle:  db 'Socket is slow: CIS settled after ',0
 m_settle2: db ' x 20ms.',13,10,0
 m_settlot: db '2s or more.',13,10,0
