@@ -1,5 +1,5 @@
 ;==========================================================================
-;  EXPGXGO 0.5 - unified clean-room DOS enabler for the EXP "GAME/MIDI G3"
+;  EXPGXGO 0.6 - unified clean-room DOS enabler for the EXP "GAME/MIDI G3"
 ;             PCMCIA game port + MIDI card (OEM: Argosy Research), three
 ;             host backends in one .COM:
 ;
@@ -55,7 +55,7 @@ MODE_PCIC equ 3
 ; blocks BY OFFSET between two runs of the same binary, so bump this on
 ; EVERY release - offsets shift with any rebuild, and a mismatched resident
 ; copy must be refused (reboot to replace), never driven.
-SGVER   equ 0004h
+SGVER   equ 0005h
 
 TDMAX   equ 40h                       ; CS tuple-data buffer size
 VBMAX   equ 40h                       ; VERS_1 capture buffer size
@@ -183,8 +183,8 @@ P_IO_LEN equ 0Bh
 p_cfg:   dw 0                         ; +00 socket
 p_cfg_at dw 0000h                     ; +02 attrs: no IRQ (none declared)
 p_cfg_vc db 50                        ; +04 Vcc  (tenths of a volt)
-p_cfg_v1 db 50                        ; +05 Vpp1
-p_cfg_v2 db 50                        ; +06 Vpp2
+p_cfg_v1 db 0                         ; +05 Vpp1
+p_cfg_v2 db 0                         ; +06 Vpp2
          db 02h                       ; +07 interface: I/O+memory
 p_cfg_cb dd 00000100h                 ; +08 config register base
          db 0                         ; +0C status reg
@@ -515,14 +515,10 @@ cs_configure:
         ; ---- RequestConfiguration (no IRQ: the CIS declares none) --------
         mov  word [p_cfg_at], 0
         mov  byte [p_cfg_vc], 50
-        mov  byte [p_cfg_v1], 50
-        mov  byte [p_cfg_v2], 50
+        mov  byte [p_cfg_v1], 0       ; Vpp OFF, no fallback: we never program
+        mov  byte [p_cfg_v2], 0
         mov  byte [p_cfg_pr], 01h     ; present: option reg only
         call try_cfg                  ; walks candidate ArgLengths (1Bh dance)
-        jnc  .cfgok
-        mov  byte [p_cfg_v1], 0       ; some stacks reject Vpp=Vcc
-        mov  byte [p_cfg_v2], 0
-        call try_cfg
         jnc  .cfgok
         mov  [r_code], ax
         mov  byte [r_stage], 4
@@ -3229,7 +3225,7 @@ errout:                               ; SI = message; print + exit
 ;==========================================================================
 ;  MESSAGES
 ;==========================================================================
-m_banner:  db 'EXPGXGO 0.5 - EXP GAME/MIDI G3 (Argosy) enabler (PCIC/CS/OB)',13,10,0
+m_banner:  db 'EXPGXGO 0.6 - EXP GAME/MIDI G3 (Argosy) enabler (PCIC/CS/OB)',13,10,0
 m_settle:  db 'Socket is slow: CIS settled after ',0
 m_settle2: db ' x 20ms.',13,10,0
 m_settlot: db '2s or more.',13,10,0
