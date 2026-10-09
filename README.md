@@ -7,7 +7,8 @@ configuration declarations, and live hardware recon — no vendor binary was
 read or disassembled.
 
 **Status:** the **GAME/MIDI G3** is fully bench-proven on an IBM PC110 —
-gameport and MIDI both come up, and MIDI plays. The gameport-only siblings
+gameport and MIDI both come up, and MIDI plays — and through `/OB` on an
+HP OmniBook 425 with its C: card in memory mode. The gameport-only siblings
 (the G1/G2 class) are supported best-effort but **untested**; we hold no
 such card.
 
@@ -122,7 +123,7 @@ repository.
 
 ## Open items
 
-- Hardware-verify the `/CS` and `/OB` backends
+- Hardware-verify the `/CS` backend
 - Verify the family path on a real G1/G2
 - MIDI IN (IRQ) untested
 
