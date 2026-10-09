@@ -35,6 +35,14 @@ get a single I/O window and no UART programming.
 `/PCIC` (direct 82365), `/CS` (Card Services client, TSR + hot-plug),
 `/OB` (OmniBook 300/425/430 Socket Services). Auto-detects CS > SS > PCIC.
 
+On the OmniBook, the ROM runs the card in the C: drive slot in either memory
+mode or I/O mode, depending on the card. The HP and SanDisk SDP5 flash cards
+run in memory mode; a 128 MB ATA card ran in I/O mode. The EXP card needs
+the C: drive slot in memory mode. It is 8-bit, and with the C: card in
+16-bit I/O mode the adapter reaches only its even-numbered registers: the
+UART's divisor, line control and status registers sit at odd offsets and
+float.
+
 ```
 EXPGXGO [/PCIC|/CS|/OB] [/IO=200] [/MIDI[=330]] [/S=n] [/W=D000] [/OFF]
   /IO=hex    card config: 200 (default) or 208; picks the COR index

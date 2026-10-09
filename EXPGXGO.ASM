@@ -1,5 +1,5 @@
 ;==========================================================================
-;  EXPGXGO 0.6 - unified clean-room DOS enabler for the EXP "GAME/MIDI G3"
+;  EXPGXGO 0.7 - unified clean-room DOS enabler for the EXP "GAME/MIDI G3"
 ;             PCMCIA game port + MIDI card (OEM: Argosy Research), three
 ;             host backends in one .COM:
 ;
@@ -1233,6 +1233,7 @@ drain_queue:
 FW_NOCARD  equ 0
 FW_DRIVE   equ 1
 FW_UNKNOWN equ 2
+FW_IO16    equ 3                      ; another socket runs 16-bit I/O
 
 ob_mode:
         mov  word [o_wseg], OB_ATTRSEG ; CIS/COR window fixed here (probed)
@@ -1268,6 +1269,8 @@ ob_mode:
 .next:
         call ob_try
         jnc  ob_got
+        cmp  byte [failwhy], FW_IO16  ; ours, but not beside 16-bit I/O
+        je   ob_failx
         inc  byte [sock]
         cmp  byte [sock], 2
         jbe  .next
@@ -1329,6 +1332,8 @@ ob_got:
 
 ; ---------- failure reporting --------------------------------------------
 ob_failx:                             ; /S given; [failwhy] says what
+        cmp  byte [failwhy], FW_IO16
+        je   .w16
         cmp  byte [failwhy], FW_UNKNOWN
         je   .unk
         cmp  byte [failwhy], FW_DRIVE
@@ -1346,6 +1351,14 @@ ob_failx:                             ; /S given; [failwhy] says what
         mov  al, [sock]
         call prdec99
         mov  si, m_indrive
+        call prstr
+        int  20h
+.w16:
+        mov  si, m_socket
+        call prstr
+        mov  al, [sock]
+        call prdec99
+        mov  si, m_io16
         call prstr
         int  20h
 .unk:
@@ -1464,7 +1477,13 @@ ob_try:
 .forced:
         call force_ident
 .ok:
-        clc
+        call ob_io16                  ; a 16-bit I/O socket beside it: no
+        jnc  .ok1                     ; use enabling it
+        mov  byte [failwhy], FW_IO16
+        call ob_restw0
+        stc
+        ret
+.ok1:   clc
         ret
 
 ; ---- ob_chkdrive: CF=1 if an enabled common-mem window maps [sock] ------
@@ -1488,6 +1507,54 @@ ob_chkdrive:
         cmp  byte [gw_n], 3
         jbe  .w
         clc
+        ret
+
+;---- ob_io16: CF=1 if a socket other than [sock] runs 16-bit I/O.  Then
+;     an 8-bit card's odd registers float and the IBM Audio never plays
+;     (measured on an OmniBook 425 with the C: card in socket 3 in I/O
+;     mode).  VLSI regs via ECh/EDh, as the ROM SS keeps them: reg 0Ah bit
+;     7-(s-1) set = socket s in memory mode; reg 38h-2(s-1) bit 0 = its
+;     16-bit I/O width.  Read-only.
+ob_io16:
+        push ax
+        push bx
+        push cx
+        mov  cl, 0                    ; CL = s-1
+.s:     mov  al, cl
+        inc  al
+        cmp  al, [sock]
+        je   .n
+        mov  bl, 0Ah
+        call vl_rd
+        mov  ah, 80h
+        shr  ah, cl
+        test al, ah
+        jnz  .n                       ; memory mode
+        mov  bl, 38h
+        sub  bl, cl
+        sub  bl, cl
+        call vl_rd
+        test al, 01h
+        jnz  .y
+.n:     inc  cl
+        cmp  cl, 4
+        jb   .s
+        clc
+        jmp  .r
+.y:     stc
+.r:     pop  cx
+        pop  bx
+        pop  ax
+        ret
+
+vl_rd:                                ; BL = EC index -> AL (atomic pair)
+        pushf
+        cli
+        mov  al, bl
+        out  0ECh, al
+        jmp  short $+2
+        in   al, 0EDh
+        popf
         ret
 
 ob_ssvc:
@@ -3225,7 +3292,7 @@ errout:                               ; SI = message; print + exit
 ;==========================================================================
 ;  MESSAGES
 ;==========================================================================
-m_banner:  db 'EXPGXGO 0.6 - EXP GAME/MIDI G3 (Argosy) enabler (PCIC/CS/OB)',13,10,0
+m_banner:  db 'EXPGXGO 0.7 - EXP GAME/MIDI G3 (Argosy) enabler (PCIC/CS/OB)',13,10,0
 m_settle:  db 'Socket is slow: CIS settled after ',0
 m_settle2: db ' x 20ms.',13,10,0
 m_settlot: db '2s or more.',13,10,0
@@ -3286,6 +3353,9 @@ m_socket:  db 'Socket ',0
 m_nocards: db ': no card present/ready.',13,10,0
 m_novtup:  db ': card present, but its CIS has no VERS_1 tuple.',13,10,0
 m_indrive: db ': in use by the system (drive window) - refused.',13,10,0
+m_io16:    db ': another socket (usually the C: drive) runs in 16-bit I/O',13,10
+           db '   mode, and on the OmniBook this card does not work beside it.  It needs',13,10
+           db '   a C: card the OmniBook runs in memory mode, or a PCIC or CS host.',13,10,0
 m_unrec:   db ': unrecognized card - ',0
 m_addman:  db '  Use /F to force, if you are sure.',13,10,0
 m_addman2: db '  Use /F /S=n to force, if you are sure.',13,10,0
